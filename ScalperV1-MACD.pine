@@ -49,9 +49,17 @@ rsiCurrent = ta.rsi(close,rsiLength)
 isRSIBetweenLimits = (rsiCurrent > rsiLowerLimit) and (rsiCurrent < rsiUpperLimit)
 
 //Trigger Alerts
-if (isBuyAlertMACD and isUptrend and isRSIBetweenLimits) 
+if (isBuyAlertMACD and isUptrend and isRSIBetweenLimits)  
     strategy.entry("buy",strategy.long)
 
-if macdcross_short
-    strategy.close("sell", strategy.long)
-//plotshape(isBuyAlert,style=shape.arrowup, color=color.green, size=size.large)
+long_tp_inp = input(defval=0.3, title='Long Take Profit %') /100
+long_take_level = strategy.position_avg_price * (1 + long_tp_inp)
+strategy.exit("Take Profit","Long", limit=long_take_level)
+
+//if isUptrend == false 
+//    strategy.close("buy")
+
+// Backtest Range
+
+startDate = input(timestamp("2022-09-01T00:00:00"))
+finishDate = input(timestamp("2022-09-31T00:00:00"))
