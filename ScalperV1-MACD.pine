@@ -1,5 +1,5 @@
 //@version=5
-indicator(title="MACD Scalper, MACD Green, RSI", shorttitle="MACD Uptrend Scalper", timeframe="")
+strategy(title="Fluffy Uptrend, MACD Green, RSI", shorttitle="Fluffy MACD Uptrend")
 // Getting inputs
 fast_length = input(title="Fast Length", group="MACD Settings", defval=12)
 slow_length = input(title="Slow Length", group="MACD Settings", defval=26)
@@ -21,9 +21,9 @@ macd = fast_ma - slow_ma
 signal = sma_signal == "SMA" ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
 hist = macd - signal
 hline(0, "Zero Line", color=color.new(#787B86, 50))
-plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)))
-plot(macd, title="MACD", color=col_macd)
-plot(signal, title="Signal", color=col_signal)
+//plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)))
+//plot(macd, title="MACD", color=col_macd)
+//plot(signal, title="Signal", color=col_signal)
 
 //EMA Uptrend
 EMA_Fast_Length = input(title="EMA Fast Length", group="EMA Settings", defval=50)
@@ -43,5 +43,6 @@ isRSIBetweenLimits = (rsiCurrent > rsiLowerLimit) and (rsiCurrent < rsiUpperLimi
 
 //Trigger Alerts
 isBuyAlertMACD = (hist >=0 and (hist[1] < hist) and (hist[1] <= 0))
-isBuyAlert = isBuyAlertMACD and isUptrend and isRSIBetweenLimits
+if (isBuyAlertMACD and isUptrend and isRSIBetweenLimits) 
+    strategy.entry("buy",strategy.long,10)
 //plotshape(isBuyAlert,style=shape.arrowup, color=color.green, size=size.large)
