@@ -1,0 +1,129 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © pjotrtje
+//
+// This script is based on a strategy i found on YouTube (https://www.youtube.com/watch?v=VWySXvbVov8)
+// Channel of TradePro. As an Pinescript exercise I translated it to a Pinescript so I can backtest if and perhaps use it as a deal start/end strategy.
+//
+//Short recap:
+//Long:
+//50 > 200      - isEMAUptrendSimple
+//close < 50    - isCloseLowerThanFastEMA
+//Stochastic RSI MAX [14] < 20 
+//Stochastic RSI Cross Up higher value than previous cross (in the last 14) 
+//
+
+//@version=5
+strategy("Fluffy 15M Stochastic RSI Top", shorttitle = "Fluffy 15M Stoch RSI Top" ,overlay=true)
+
+//Get needed indicators
+
+//EMA Uptrend
+EMA_Fast_Length = input(title="EMA Fast Length", group="EMA Trend Settings", defval=50)
+EMA_Slow_Length = input(title="EMA Slow Length", group="EMA Trend Settings", defval=200)
+EMA_Fast = ta.ema(close,EMA_Fast_Length)
+EMA_Slow = ta.ema(close,EMA_Slow_Length)
+
+isEMAUptrendSimple = EMA_Fast > EMA_Slow
+
+isCloseLowerThanFastEMA = close < EMA_Fast
+
+//Stochastic RSI
+ThresholdOverBought = input.int(title="Stochastic Upperlevel", group="Stochastic Settings", defval=80)
+ThresholdOverSold = input.int(title="Stochastic Lowerlevel", group="Stochastic Settings", defval=20)
+periodK = input.int(14, title="%K Length", group="Stochastic Settings", minval=1)
+smoothK = input.int(3, title="%K Smoothing", group="Stochastic Settings", minval=1)
+periodD = input.int(3, title="%D Smoothing", group="Stochastic Settings", minval=1)
+rsi1 = ta.rsi(close, 14)
+k = ta.sma(ta.stoch(rsi1, rsi1, rsi1, periodK), smoothK)
+d = ta.sma(k, periodD)
+
+isStochasticCrossUp = ta.crossover(k,d)
+isStochasticOverSold = k < ThresholdOverSold
+
+//ATR Stoploss finder (by veryfid)
+length = input.int(title="Length", group="ATR Settings", defval=14, minval=1)
+smoothing = input.string(title="Smoothing", group="ATR Settings", defval="EMA", options=["RMA", "SMA", "EMA", "WMA"])
+m = input(0.7, "Multiplier")
+srcHigh = input(high)
+srcLow = input(low)
+
+collong = input(color.teal, "Low Line Color",inline ="1")
+colshort = input(color.red, "High Line Color",inline ="2")
+
+ma_function(source, length) =>
+	if smoothing == "RMA"
+		ta.rma(source, length)
+	else
+		if smoothing == "SMA"
+			ta.sma(source, length)
+		else
+			if smoothing == "EMA"
+				ta.ema(source, length)
+			else
+				ta.wma(source, length)
+				
+trHigh = ma_function(ta.tr(true), length) * m + srcHigh
+trLow = srcLow - ma_function(ta.tr(true), length) * m
+
+// Calculate stuff
+//Check if the Value of the Stochastic Was recently oversold (parameter default: 15)
+f_isStochasticRecentlyOverSold(_steps) =>
+    bool _wasOverSold = false
+    for i = 1 to _steps
+        if isStochasticOverSold[i]
+            _wasOverSold := true
+    _wasOverSold
+
+//Then this is the second (higher) crossup that should be the start signal.
+f_isStochasticRecentlyLowerCrossUp(_crossvalue,_steps) =>
+    bool _hasRecentLowerCrossUp = false
+    for i = 1 to _steps
+        if isStochasticCrossUp[i] and k[i] < _crossvalue
+            _hasRecentLowerCrossUp := true
+    _hasRecentLowerCrossUp
+
+//https://www.tradingview.com/script/IHVPG6TS-Stop-loss-and-Take-Profit-in-example/
+f_moneyToSLPoints(money) =>
+    strategy.position_size !=0 ? (money / syminfo.pointvalue / math.abs(strategy.position_size)) / syminfo.mintick : na
+
+// debug plots for visualize SL & TP levels
+f_pointsToPrice(pp) =>
+    na(pp) ? na : strategy.position_avg_price + pp * math.sign(strategy.position_size) * syminfo.mintick
+
+long_sl_amount = int(close-trLow)
+l = f_moneyToSLPoints(long_sl_amount)
+p = f_moneyToSLPoints(2*long_sl_amount)
+
+pp = plot(f_pointsToPrice(p), style = plot.style_linebr )
+lp = plot(f_pointsToPrice(-l), style = plot.style_linebr )
+avg = plot( strategy.position_avg_price, style = plot.style_linebr )
+fill(pp, avg, color = color.green)
+fill(avg, lp, color = color.red)
+
+// Plot stuff
+pEMAFast = plot(EMA_Fast, title="EMA Fast", color=color.yellow, style=plot.style_line)
+pEMASlow = plot(EMA_Slow, title="EMA Slow", color=color.red, style=plot.style_line)
+EMAResistanceZoneColor = if (EMA_Fast > EMA_Slow) 
+    color.rgb(0, 140, 0, 70)
+else
+    color.rgb(140, 0, 0, 90)
+
+fill(pEMAFast, pEMASlow, color=EMAResistanceZoneColor, title="EMA Resistance zone")
+
+p1 = plot(trHigh, title = "ATR Short Stop Loss", color= colshort, trackprice = true)
+p2 = plot(trLow, title = "ATR Long Stop Loss", color= collong, trackprice = true)
+
+// Create signals
+longStartCondition = isEMAUptrendSimple and isCloseLowerThanFastEMA and isStochasticCrossUp and f_isStochasticRecentlyOverSold(7) and f_isStochasticRecentlyLowerCrossUp(k,7)
+
+if (longStartCondition and strategy.position_size == 0)
+    strategy.entry("Buy", strategy.long)
+    alert('', alert.freq_once_per_bar_close)
+
+strategy.exit("x", from_entry = "Buy", profit = p, loss = l)
+
+// Backtest Range
+//startDate = input(timestamp("2022-08-15T00:00:00")) 
+//finishDate = input(timestamp("2022-09-31T00:00:00"))
+
+
